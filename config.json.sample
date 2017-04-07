@@ -1,0 +1,27 @@
+{
+  "tv": {
+    "server": "<Internal IP for TV>",
+    "port": 1925,
+    "rootPath": "1",
+    "pollInterval": 1000
+  },
+  "lightsMapping": {
+    "left": {
+      "0": [
+        {"id": "2"}, // Light id that should follow left top Ambilight
+        {"id": "5"}
+      ],
+      "1": [
+
+      ]
+    },
+    "right": {
+      "0": [
+
+      ],
+      "1": [
+
+      ]
+    }
+  }
+}

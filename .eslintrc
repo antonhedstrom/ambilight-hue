@@ -1,0 +1,12 @@
+{
+  "parser": "babel-eslint",
+  "globals": {
+  },
+  "env": {
+    // in CommonJS
+    "node": true
+  },
+  "rules": {
+    "quotes": [1, "single"]
+  }
+}
