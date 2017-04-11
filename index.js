@@ -3,6 +3,7 @@ const startTick = require('./tick');
 const Hue = require('./services/hue');
 const Store = require('./services/store');
 
+
 function init(hueClient) {
   Hue.listAllLights(hueClient).then(lights => {
     startTick(hueClient);

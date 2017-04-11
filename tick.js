@@ -10,45 +10,13 @@ const TV = new PhilipsTV({
 });
 
 let reconnectTries = 0;
-
-const orientations = Object.keys(config.lightsMapping);
 let hueClient;
+let cachedAmbilightData;
 
-module.exports = function tick(client) {
-  // First time we call this client is set so lets store it for later use.
-  if ( client ) {
-    hueClient = client;
-  }
-
-  TV.getAmbilightData().then(data => {
-    data = JSON.parse(data);
-    const layer1 = data.layer1;
-    const promises = [];
-    // Left, right, ...
-    orientations.forEach(orientation => {
-      if ( layer1.hasOwnProperty(orientation) ) {
-        let positions = config.lightsMapping[orientation];
-        Object.keys(positions).forEach(pos => {
-          if ( layer1[orientation].hasOwnProperty(pos) ) {
-            let lights = positions[pos];
-            lastTickLightsCounter = lights.length;
-            lights.forEach((light, index) => {
-              let promise = Hue.updateLight(hueClient, light.id, {
-                rgb: layer1[orientation][pos]
-              }).then(light => {
-                // Noop
-              }).catch(err => {
-                console.error(err);
-              });
-              promises.push(promise);
-            });
-          }
-        });
-      }
-    });
-    Q.all(promises).then((lights) => {
-      tick();
-    });
+function fetchAmbilightData() {
+  return TV.getAmbilightData().then(data => {
+    cachedAmbilightData = JSON.parse(data);
+    setTimeout(fetchAmbilightData, config.tv.pollInterval);
   }).catch(err => {
     if ( err.code === 'EHOSTUNREACH' ) {
       reconnectTries++;
@@ -62,4 +30,38 @@ module.exports = function tick(client) {
       console.error(err);
     }
   });
+}
+
+function syncLight(id, layer, side, index) {
+  if ( !cachedAmbilightData ) {
+    setTimeout(syncLight.bind(this, id, layer, side, index), 500);
+    return;
+  }
+  var ts = (new Date()).getTime();
+  // TODO: Crossing fingers that all attributes exists
+  var ambilightData = cachedAmbilightData[layer][side][index];
+  Hue.updateLight(hueClient, id, {
+    rgb: ambilightData
+  }).then(light => {
+    // Fetch again!
+    var newTs = (new Date()).getTime();
+    // console.log(`Updated Light#${id} after ${newTs - ts}msecs`);
+    syncLight(id, layer, side, index);
+  })
+}
+
+module.exports = function tick(client) {
+  // First time we call this client is set so lets store it for later use.
+  if ( client ) {
+    hueClient = client;
+  }
+
+  fetchAmbilightData().then(data => {
+    syncLight(3, 'layer1', 'left', 0);
+    syncLight(4, 'layer1', 'left', 1);
+    syncLight(5, 'layer1', 'right', 0);
+    syncLight(6, 'layer1', 'right', 1);
+    syncLight(7, 'layer1', 'left', 0);
+  });
+
 }
