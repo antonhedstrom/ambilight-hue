@@ -3,7 +3,7 @@ const ajaxRequest = require('ajax-request');
 function PhilipsTV(options) {
   this.ip = options.ip;
   this.port = options.port || 1925;
-  this.rootPath = options.rootPath || 1;
+  this.rootPath = options.rootPath || '1';
 }
 
 PhilipsTV.prototype.getBaseUrl = function() {
@@ -20,7 +20,32 @@ PhilipsTV.prototype.getAmbilightData = function() {
         return reject(error);
       }
 
-      resolve(body);
+      try {
+        const data = JSON.parse(body);
+        resolve(data);
+      } catch (error) {
+        reject(error);
+      }
+    });
+  });
+};
+
+PhilipsTV.prototype.getAmbilightMode = function() {
+  return new Promise((resolve, reject) => {
+    ajaxRequest({
+      method: 'GET',
+      url: this.getBaseUrl() + '/ambilight/mode'
+    }, function (error, response, body) {
+      if ( error ) {
+        return reject(error);
+      }
+
+      try {
+        const data = JSON.parse(body);
+        resolve(data.current);
+      } catch (error) {
+        reject(error);
+      }
     });
   });
 };
@@ -42,8 +67,8 @@ PhilipsTV.prototype.setAmbilightMode = function(mode) {
         return reject(error);
       }
 
-      resolve(body);
-    });
+      resolve();
+    }).catch(console.error);
   });
 };
 
@@ -57,7 +82,12 @@ PhilipsTV.prototype.getSysInfo = function() {
         return reject(error);
       }
 
-      resolve(body);
+      try {
+        const data = JSON.parse(body);
+        resolve(data);
+      } catch (error) {
+        reject(error);
+      }
     });
   });
 };

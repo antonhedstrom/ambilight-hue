@@ -18,9 +18,15 @@
   "dependencies": {
     "ajax-request": "^1.2.1",
     "ambilight": "^0.2.4",
+    "body-parser": "^1.17.2",
+    "cli-color": "^1.2.0",
+    "express": "^4.15.4",
     "huejay": "^1.5.0",
     "json-fs-store": "^1.0.1",
+    "memory-cache": "^0.2.0",
+    "morgan": "^1.8.2",
     "q": "^1.5.0",
-    "request": "^2.79.0"
+    "request": "^2.79.0",
+    "underscore": "^1.8.3"
   }
 }

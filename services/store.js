@@ -1,6 +1,6 @@
 
 const filePath = './data/';
-const storeId = 'hue-ambiligt';
+const storeId = 'hue-ambilight';
 const store = require('json-fs-store')(filePath);
 
 module.exports = {
@@ -25,16 +25,12 @@ module.exports = {
     store.load(storeId, (err, object) => {
       // err if JSON parsing failed
       if (err) {
-        if (key) {
-          reject();
-        } else {
-          resolve({});
-        }
+        reject(err);
       } else if (key) {
         if (object && object[key] !== undefined) {
           resolve(object[key]);
         } else {
-          reject(new Error('Key doesn\'t exists'));
+          reject(`Key doesn't exist: ${key}`);
         }
       } else {
         resolve(object);

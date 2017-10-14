@@ -1,38 +1,94 @@
+const express = require('express');
+const app = express();
+const bodyParser = require('body-parser');
+const morgan = require('morgan');
+const clc = require('cli-color');
+
+const apiRoutes = require('./api');
+
 const config = require('./config.json');
-const startTick = require('./tick');
+const tick = require('./tick');
 const Hue = require('./services/hue');
 const Store = require('./services/store');
 
+const hueClient = require('./hue-client');
+const tvClient = require('./tv-client');
+const lightCache = require('./lights-mapping-cache');
 
-function init(hueClient) {
-  Hue.listAllLights(hueClient).then(lights => {
-    startTick(hueClient);
+app.use(bodyParser.json()); // for parsing application/json
+app.use(bodyParser.urlencoded({ extended: true })); // for parsing application/x-www-form-urlencoded
+app.use(morgan('dev'));
+
+app.use(apiRoutes);
+
+app.set('port', process.env.PORT || 3000);
+
+app.listen(app.get('port'), () => {
+  console.log(clc.green(`🚃  EXPRESS APP STARTED AT PORT ${app.get('port')}`));
+
+  readDataFromJSON().then(data => {
+    tick.fetchAmbilightData().then(() => {
+      tick.syncLights();
+    });
+  }, err => {
+    console.error(err);
+  });
+});
+
+
+function readDataFromJSON() {
+  // Philips Hue connection (look for existing user)
+  const huePromise = Store.getData('hue-client').then(data => {
+    console.log(clc.yellow(`💡  Connect using existing user (${data.username.substring(0, 8)}...)`));
+    hueClient.configureInstance({
+      host: data.host,
+      username: data.username
+    }).bridge.get().then(bridge => {
+      console.log(clc.green(`💡  Connected to ${bridge.name} (Zigbee Channel ${bridge.zigbeeChannel})`));
+    });
+    // Resolve with client
+    return hueClient.getInstance();
+  }).catch(err => {
+    console.log(`💡  ❌  Missing Philips HUE credentials. Please use app to configure.`);
+  });
+
+  // Philips TV Ambilight connection
+  const tvPromise = Store.getData('tv-client').then(data => {
+    console.log(clc.yellow(`📺  Connecting to ${data.ip}:${data.port}...`));
+    tvClient.configureInstance(data.ip, {
+      id: data.id
+    }).getSysInfo().then(data => {
+      if ( data ) {
+        console.log(clc.green(`📺  Connected to ${data.model}`));
+      }
+    }).catch(console.error);
+    // Resolve with client
+    return tvClient.getInstance();
+  }).catch(err => {
+    console.log(`📺  ❌  Missing TV Client info. Please use app to configure.`);
+  });
+
+  // Fill Light Mapping Cache with data from JSON.
+  const mappingPromise = new Promise((resolve, reject) => {
+    Store.getData('lights-mapping').then(data => {
+      if ( !data ) {
+        resolve({});
+        return;
+      }
+      lightCache.importJson(data);
+      console.log(clc.green(`⚡  Populated Light Cache from JSON file.`));
+      resolve(data);
+    }, err => {
+      console.log(err);
+      reject(err);
+    });
+  });
+
+  return Promise.all([huePromise, tvPromise, mappingPromise]).then(values => {
+    return {
+      hue: values[0],
+      tv: values[1],
+      mapping: values[2]
+    };
   });
 }
-
-Hue.connectBridge().then(bridge => {
-  // Look for existing user
-  Store.getData('client').then(data => {
-    console.log(`Connect using existing user (${data.username.substring(0, 8)})...`);
-    const client = Hue.createClient({
-      host:     data.host,
-      username: data.username
-    });
-    init(client);
-  }, err => {
-    // Create new user
-    let client = Hue.createClient({
-      host: bridge.ip
-    });
-
-    Hue.createUser(client).then((user) => {
-      client.username = user.username;
-      Store.setData('client', client.config).then(data => {
-        console.log('Credentials stored as file.');
-        init(client);
-      });
-    });
-
-  }).catch(console.error);
-}).catch(console.error);
-

@@ -123,12 +123,7 @@ module.exports = {
       }
 
       Object.keys(attrs).forEach(key => {
-        if ( light.hasOwnProperty(key) ) {
           light[key] = attrs[key];
-        }
-        else {
-          console.log(`Warning: Light (${light.model}) doesn't support ${key} (skipping).`);
-        }
       });
 
       return client.lights.save(light);
@@ -136,6 +131,6 @@ module.exports = {
       console.log(error.stack);
       reject(error.stack);
     });
-  }),
+  })
 
 };

@@ -2,20 +2,19 @@ const Q = require('q');
 
 const config = require('./config.json');
 const Hue = require('./services/hue');
-const PhilipsTV = require('./services/philips-tv');
-const TV = new PhilipsTV({
-  ip: config.tv.server,
-  port: config.tv.port,
-  rootPath: config.tv.rootPath
-});
+const hueClient = require('./hue-client');
+const tvClient = require('./tv-client');
+const lightsMappingCache = require('./lights-mapping-cache');
+
+let pollLightInterval = 100;
 
 let reconnectTries = 0;
-let hueClient;
 let cachedAmbilightData;
 
 function fetchAmbilightData() {
-  return TV.getAmbilightData().then(data => {
-    cachedAmbilightData = JSON.parse(data);
+  return tvClient.getInstance().getAmbilightData().then(data => {
+    reconnectTries = 0;
+    cachedAmbilightData = data;
     setTimeout(fetchAmbilightData, config.tv.pollInterval);
   }).catch(err => {
     if ( err.code === 'EHOSTUNREACH' ) {
@@ -24,7 +23,7 @@ function fetchAmbilightData() {
         process.stdout.write('TV Unreachable ');
       }
       process.stdout.write('.');
-      setTimeout(tick, Math.min(reconnectTries, 20) * 1000);
+      setTimeout(fetchAmbilightData, Math.min(reconnectTries, 20) * 1000);
     }
     else {
       console.error(err);
@@ -32,36 +31,67 @@ function fetchAmbilightData() {
   });
 }
 
-function syncLight(id, layer, side, index) {
-  if ( !cachedAmbilightData ) {
-    setTimeout(syncLight.bind(this, id, layer, side, index), 500);
+function syncLight(id, mapping) {
+  // TODO: Crossing fingers that all attributes exists
+  let ambilightData = cachedAmbilightData.layer1[mapping.side][mapping.index];
+  let client = hueClient.getInstance();
+  if ( !client ) {
     return;
   }
-  var ts = (new Date()).getTime();
-  // TODO: Crossing fingers that all attributes exists
-  var ambilightData = cachedAmbilightData[layer][side][index];
-  Hue.updateLight(hueClient, id, {
+  Hue.updateLight(client, id, {
     rgb: ambilightData
-  }).then(light => {
-    // Fetch again!
-    var newTs = (new Date()).getTime();
-    // console.log(`Updated Light#${id} after ${newTs - ts}msecs`);
-    syncLight(id, layer, side, index);
+  }).catch(err => {
+    console.error('ERROR Updating light', id, err);
+  });
+}
+
+function syncLights() {
+  if ( !cachedAmbilightData ) {
+    // No ambilight data, try later....
+    setTimeout(syncLights, 10*1000);
+    return;
+  }
+  const lightsMapping = lightsMappingCache.exportJson();
+  Object.keys(lightsMapping).map(key => {
+    if ( key.indexOf('light-') === 0 ) {
+      const lightId = key.split('-')[1];
+      syncLight(lightId, lightsMapping[key]);
+    }
   })
 }
 
-module.exports = function tick(client) {
-  // First time we call this client is set so lets store it for later use.
-  if ( client ) {
-    hueClient = client;
-  }
-
+function tick(client) {
   fetchAmbilightData().then(data => {
-    syncLight(3, 'layer1', 'left', 0);
-    syncLight(4, 'layer1', 'left', 1);
-    syncLight(5, 'layer1', 'right', 0);
-    syncLight(6, 'layer1', 'right', 1);
-    syncLight(7, 'layer1', 'left', 0);
+    syncLight(3);
+    syncLight(4);
+    syncLight(5);
+    syncLight(6);
+    syncLight(7);
   });
 
 }
+
+function updatePollLightInterval(interval) {
+  return new Promise((resolve, reject) => {
+    const newInterval = parseInt(interval, 10);
+    if ( isNaN(newInterval) ) {
+      reject('invalid argument. Expected number');
+      return;
+    }
+    pollLightInterval = Math.max(100, newInterval);
+    resolve(pollLightInterval);
+  });
+}
+
+function getPollLightInterval() {
+  return pollLightInterval;
+}
+
+module.exports = {
+  tick,
+  updatePollLightInterval,
+  getPollLightInterval,
+  syncLights,
+  fetchAmbilightData
+};
+
